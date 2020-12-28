@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const Discord = require('discord.js');
+const axios = require('axios').default;
+const jsonfile = require('jsonfile')
 
 const client = new Discord.Client();
 const prefix = '!';
@@ -39,6 +41,59 @@ client.on('message', async message => {
           msg.delete();
         }, 10000);
       });
+    }
+  } else if (command === 'tldrrefresh') {
+    const tldrEndpoint = axios.create({
+      baseURL: `https://tldr-pages.github.io/assets/`,
+      timeout: 60000,
+    });
+
+    const { data } = await tldrEndpoint.get(null);
+
+    jsonfile.writeFileSync('tldr.json', data, { spaces: 2 });
+    message.reply('tldr updated!');
+  } else if (command === 'tldr') {
+
+    const tldrEndpoint = axios.create({
+      baseURL: `https://raw.githubusercontent.com/tldr-pages/tldr/master/pages/`,
+      timeout: 60000,
+    });
+
+    const cmd = args[0];
+    const platform = args[1] || 'common';
+    data = jsonfile.readFileSync('tldr.json');
+
+    let found = false;
+    for (let i = 0; i < data.commands.length; i++) {
+      const c = data.commands[i];
+      if (c.name === cmd) {
+        found = true;
+        const oses = [platform, "common", "linux", "windows", "osx", "sunos"];
+        for (let j = 0; j < oses.length; j++) {
+          const o = oses[j];
+          try {
+            let { data } = await tldrEndpoint.get(`${o}/${cmd}.md`);
+            // data = data.replace(/(\r\n|\r|\n)+/g, '$1');
+            const lines = data.split('\n');
+            const title = lines[0].substring(2,);
+            const tldrEmbed = new Discord.MessageEmbed()
+              .setColor('#AD1457')
+              .setTitle(`${title} [${o}]`)
+              .setURL(`https://github.com/tldr-pages/tldr/tree/master/pages/${o}/${cmd}.md`)
+              .setDescription(lines.slice(1).join('\n').trim())
+              .setFooter('https://tldr.sh/')
+              .setTimestamp();
+
+            message.channel.send(tldrEmbed);
+          } catch (error) {
+            // console.log(error);
+          }
+          break;
+        }
+      }
+    }
+    if (!found) {
+      message.reply('the database does not include this command! Send `!tldrrefresh` to refresh the cache.');
     }
   }
 });
